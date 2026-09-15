@@ -1,0 +1,7 @@
+databases/
+results/
+tmp/
+upload/
+.agents/
+.venv/
+metadata/

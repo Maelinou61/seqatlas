@@ -1,0 +1,11 @@
+name: mmseqs-web
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - mmseqs2
+  - prodigal-gv
+  - pip
+  - pip:
+      - -r requirements.txt

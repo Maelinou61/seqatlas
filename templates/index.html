@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MMseqs Webserver</title>
+  <style>
+    :root {
+      --bg: #f3f7f8;
+      --card: #ffffff;
+      --ink: #132225;
+      --muted: #4a6268;
+      --accent: #0d9488;
+      --danger: #b42318;
+      --border: #d6e3e6;
+    }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 20% 0%, #d7eeea, transparent 45%), var(--bg);
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(12, 32, 38, 0.08);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.6rem;
+    }
+    form {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    input[type="file"], select {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+    }
+    select {
+      width: 100%;
+      color: var(--ink);
+      font: inherit;
+    }
+    textarea {
+      width: 100%;
+      min-height: 160px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      font: 0.95rem/1.4 "IBM Plex Mono", "Menlo", monospace;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin-top: 10px;
+      margin-bottom: 12px;
+    }
+    .input-box {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      background: linear-gradient(180deg, #fbfefe 0%, #f4fbfa 100%);
+    }
+    .input-box h2 {
+      margin: 0 0 6px 0;
+      font-size: 1rem;
+    }
+    .input-box p {
+      margin: 0 0 10px 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    button {
+      border: 0;
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .msg {
+      color: #065f46;
+      background: #d1fae5;
+      border: 1px solid #6ee7b7;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .err {
+      color: var(--danger);
+      background: #fee4e2;
+      border: 1px solid #fda29b;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-top: 18px;
+    }
+    .map-wrap {
+      margin-top: 18px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #eef7f6;
+    }
+    .map-wrap iframe {
+      width: 100%;
+      height: 720px;
+      border: 0;
+      display: block;
+    }
+    .map-meta {
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      background: #eef7f6;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Recherche MMseqs</h1>
+      <p>Charger un fichier FASTA proteique ou nucleotidique et lancer la recherche dans la base pre-definie.</p>
+
+      {% if message %}
+        <div class="msg">{{ message }}</div>
+      {% endif %}
+      {% if error %}
+        <div class="err">{{ error }}</div>
+      {% endif %}
+
+      <form action="/search" method="post" enctype="multipart/form-data">
+        <div class="input-grid">
+          <div class="input-box">
+            <h2>Base MMseqs</h2>
+            <p>Choisir la base de reference pour cette recherche.</p>
+            <select name="mmseqs_db" required>
+              {% if not db_choices %}
+              <option value="">Aucune base disponible</option>
+              {% endif %}
+              {% for db in db_choices %}
+              <option value="{{ db.value }}" {% if db.value == selected_db %}selected{% endif %}>
+                {{ db.label }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="input-box">
+            <h2>Option 1</h2>
+            <p>Charger un fichier proteique ou nucleotidique. Format <code>.faa</code>, <code>.fa</code>, <code>.fasta</code>, <code>.fna</code> ou <code>.ffn</code>.</p>
+            <input type="file" name="faa_file" accept=".faa,.fa,.fasta,.fna,.ffn" />
+          </div>
+
+          <div class="input-box">
+            <h2>Option 2</h2>
+            <p>Coller directement une sequence FASTA ou une sequence brute d'acides amines.</p>
+            <textarea
+              name="sequence_text"
+              placeholder=">query_1&#10;MKTIIALSYIFCLVFADYKDDDDK&#10;&#10;ou simplement&#10;MKTIIALSYIFCLVFADYKDDDDK"
+            ></textarea>
+          </div>
+        </div>
+        <button type="submit">Lancer</button>
+      </form>
+
+      {% if map_url %}
+      <div class="map-wrap">
+        <div class="map-meta">
+          Carte monde des biosamples associes aux genomes retenus. {{ map_points }} point(s) avec coordonnees.
+        </div>
+        <iframe src="{{ map_url }}" title="Carte Kepler des genomes associes"></iframe>
+      </div>
+      {% endif %}
+
+      {% if rows %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {% for h in headers %}
+              <th>{{ h }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              {% for h in headers %}
+              <td>{{ row.get(h, '') }}</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>
