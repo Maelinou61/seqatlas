@@ -3,7 +3,7 @@
 Serveur web minimal pour:
 - uploader un fichier de séquences (`.faa`, `.fa`, `.fasta`)
 - exécuter `mmseqs easy-search` sur une base existante
-- enrichir les hits avec `scripts/add_metadata/add_metadata_mmseqs2.py`
+- enrichir les hits selon la base sélectionnée : VIRE ou MetaVR
 - afficher les génomes retenus sur une carte monde Kepler
 
 ## 1) Installation
@@ -37,7 +37,37 @@ Puis adapte au minimum:
 - `MMSEQS_BIN` si `mmseqs` n'est pas dans ton `PATH`
 - `PRODIGAL_GV_BIN` si `prodigal-gv` n'est pas dans ton `PATH`
 - `MMSEQS_THREADS` pour contrôler le parallélisme
-- `METADATA_FILE` vers `vire_with_coordinates.parquet`
+- les variables VIRE ou MetaVR de la section suivante
+
+### Profils de post-traitement
+
+Le serveur choisit le post-traitement à partir de la base MMseqs sélectionnée :
+
+- une base dont le nom contient `metavr` ou `imgvr` utilise le profil **MetaVR** ;
+- les autres bases utilisent le profil **VIRE** ;
+- si une base MetaVR a un autre nom, ajoute son nom ou son chemin à `METAVR_DATABASES` (valeurs séparées par des virgules).
+
+VIRE conserve la configuration historique :
+
+```dotenv
+VIRE_POSTPROCESS_SCRIPT=scripts/add_metadata/add_metadata_mmseqs2.py
+VIRE_METADATA_FILE=/chemin/vers/vire_with_coordinates.parquet
+```
+
+`POSTPROCESS_SCRIPT` et `METADATA_FILE` restent acceptés pour éviter de casser une configuration existante. `VIRE_*` est prioritaire lorsqu'il est défini.
+
+MetaVR nécessite obligatoirement deux tables distinctes : `--metadata` (métadonnées IMG) et `--taxonomy` (taxonomie UViG). Configure-les ainsi :
+
+```dotenv
+METAVR_POSTPROCESS_SCRIPT=scripts/add_metadata/add_metadata_genomes_metavr.py
+METAVR_METADATA_FILE=/chemin/vers/Source_dataset_metadata.tsv
+METAVR_TAXONOMY_FILE=/chemin/vers/IMGVR5_UViG.tsv
+
+# Facultatif si le nom de la base ne contient pas metavr ou imgvr
+METAVR_DATABASES=ma_base_imgvr
+```
+
+Le script `add_metadata_genomes_metavr.py` relie la taxonomie au meilleur `uvig_id` et les métadonnées au `IMG Genome ID`. Il accepte les fichiers TSV et Parquet. Les colonnes IMG usuelles (`Latitude`, `Longitude`, `Genome Name / Sample Name`, etc.) sont également adaptées pour la carte Kepler.
 
 Exemple de commande équivalente à ce que lance le serveur:
 
@@ -77,7 +107,8 @@ Interface: `http://localhost:8000`
 
 ## Notes
 
-- Le script `scripts/add_metadata/add_metadata_mmseqs2.py` sélectionne le meilleur génome par contig, puis ajoute les métadonnées `genome_id`.
+- Le script VIRE `scripts/add_metadata/add_metadata_mmseqs2.py` sélectionne le meilleur génome par contig, puis ajoute les métadonnées `genome_id`.
+- Le script MetaVR `scripts/add_metadata/add_metadata_genomes_metavr.py` sélectionne le meilleur génome par contig et ajoute à la fois taxonomie et métadonnées IMG.
 - Le fichier `vire_with_coordinates.parquet` contient déjà `genome_id`, `biosample_name`, `latitude`, `longitude` et les métadonnées utiles.
 - Si le post-traitement ou la carte échouent, la recherche MMseqs continue quand même et l'interface affiche un avertissement.
 - La base `databases/testDB*` déjà présente dans ce dépôt semble être une base MMseqs utilisable telle quelle.

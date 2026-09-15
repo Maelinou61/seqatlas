@@ -180,7 +180,7 @@
               {% endif %}
               {% for db in db_choices %}
               <option value="{{ db.value }}" {% if db.value == selected_db %}selected{% endif %}>
-                {{ db.label }}
+                {{ db.label }} — {{ db.profile|upper }}
               </option>
               {% endfor %}
             </select>

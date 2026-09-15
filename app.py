@@ -7,7 +7,6 @@ import sys
 import uuid
 from itertools import islice
 from pathlib import Path
-from typing import Dict, List
 
 from flask import Flask, render_template, request, send_from_directory, url_for
 from werkzeug.utils import secure_filename
@@ -15,7 +14,7 @@ from werkzeug.utils import secure_filename
 BASE_DIR = Path(__file__).resolve().parent
 
 
-def load_local_env(env_path: Path) -> None:
+def load_local_env(env_path):
     if not env_path.exists():
         return
 
@@ -51,6 +50,26 @@ POSTPROCESS_SCRIPT = Path(
     )
 )
 METADATA_FILE = os.getenv("METADATA_FILE", "")
+VIRE_POSTPROCESS_SCRIPT = Path(os.getenv("VIRE_POSTPROCESS_SCRIPT", POSTPROCESS_SCRIPT))
+VIRE_METADATA_FILE = os.getenv("VIRE_METADATA_FILE", METADATA_FILE)
+METAVR_POSTPROCESS_SCRIPT = Path(
+    os.getenv(
+        "METAVR_POSTPROCESS_SCRIPT",
+        BASE_DIR / "scripts" / "add_metadata" / "add_metadata_genomes_metavr.py",
+    )
+)
+METAVR_METADATA_FILE = os.getenv("METAVR_METADATA_FILE", "")
+METAVR_TAXONOMY_FILE = os.getenv("METAVR_TAXONOMY_FILE", "")
+METAVR_DATABASES = {
+    value.strip().lower()
+    for value in os.getenv("METAVR_DATABASES", "").split(",")
+    if value.strip()
+}
+METAVR_DATABASE_PATTERNS = tuple(
+    value.strip().lower()
+    for value in os.getenv("METAVR_DATABASE_PATTERNS", "metavr,imgvr").split(",")
+    if value.strip()
+)
 
 RESULT_COLUMNS = [
     "query",
@@ -72,23 +91,38 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024  # 128 MB
 
 
-def resolve_project_path(value: str | Path) -> Path:
+def resolve_project_path(value):
     path = Path(value)
     if path.is_absolute():
         return path
     return BASE_DIR / path
 
 
-def path_for_form(path: Path) -> str:
+def path_for_form(path):
     try:
         return str(path.resolve().relative_to(BASE_DIR))
     except ValueError:
         return str(path.resolve())
 
 
-def get_database_choices() -> List[Dict[str, str]]:
+def database_profile(mmseqs_db):
+    """Return the metadata profile associated with a selected MMseqs database."""
+    database_path = resolve_project_path(mmseqs_db)
+    candidates = {
+        mmseqs_db.lower(),
+        str(database_path).lower(),
+        database_path.name.lower(),
+    }
+    if candidates & METAVR_DATABASES:
+        return "metavr"
+    if any(pattern in database_path.name.lower() for pattern in METAVR_DATABASE_PATTERNS):
+        return "metavr"
+    return "vire"
+
+
+def get_database_choices():
     db_dir = resolve_project_path(MMSEQS_DB_DIR)
-    choices_by_value: Dict[str, str] = {}
+    choices_by_value = {}
 
     if MMSEQS_DB:
         default_path = resolve_project_path(MMSEQS_DB)
@@ -102,12 +136,16 @@ def get_database_choices() -> List[Dict[str, str]]:
             choices_by_value[path_for_form(db_path)] = db_path.name
 
     return [
-        {"value": value, "label": label}
+        {
+            "value": value,
+            "label": label,
+            "profile": database_profile(value),
+        }
         for value, label in sorted(choices_by_value.items(), key=lambda item: item[1].lower())
     ]
 
 
-def get_default_database_value() -> str:
+def get_default_database_value():
     choices = get_database_choices()
     if MMSEQS_DB:
         default_value = path_for_form(resolve_project_path(MMSEQS_DB))
@@ -116,7 +154,7 @@ def get_default_database_value() -> str:
     return choices[0]["value"] if choices else ""
 
 
-def validate_selected_database(raw_value: str) -> str:
+def validate_selected_database(raw_value):
     selected_value = raw_value or get_default_database_value()
     allowed_values = {choice["value"] for choice in get_database_choices()}
     if not selected_value or selected_value not in allowed_values:
@@ -125,7 +163,7 @@ def validate_selected_database(raw_value: str) -> str:
 
 
 @app.context_processor
-def inject_database_choices() -> Dict[str, object]:
+def inject_database_choices():
     selected_db = request.form.get("mmseqs_db") or get_default_database_value()
     return {
         "db_choices": get_database_choices(),
@@ -133,12 +171,12 @@ def inject_database_choices() -> Dict[str, object]:
     }
 
 
-def allowed_file(filename: str) -> bool:
+def allowed_file(filename):
     lower = filename.lower()
     return lower.endswith((".faa", ".fa", ".fasta", ".fna", ".ffn"))
 
 
-def looks_like_nucleotide_fasta(path: Path) -> bool:
+def looks_like_nucleotide_fasta(path):
     if path.suffix.lower() == ".faa":
         return False
 
@@ -158,7 +196,7 @@ def looks_like_nucleotide_fasta(path: Path) -> bool:
     return not invalid_chars
 
 
-def normalize_sequence_input(raw_text: str) -> str:
+def normalize_sequence_input(raw_text):
     text = (raw_text or "").strip()
     if not text:
         raise ValueError("Aucune sequence fournie")
@@ -180,7 +218,7 @@ def normalize_sequence_input(raw_text: str) -> str:
     return f">query_sequence\n{sequence}\n"
 
 
-def run_mmseqs(query_fasta: Path, output_tsv: Path, mmseqs_db: str) -> subprocess.CompletedProcess:
+def run_mmseqs(query_fasta, output_tsv, mmseqs_db):
     if not mmseqs_db:
         raise ValueError("MMSEQS_DB n'est pas configuré")
 
@@ -211,7 +249,7 @@ def run_mmseqs(query_fasta: Path, output_tsv: Path, mmseqs_db: str) -> subproces
     return subprocess.run(cmd, capture_output=True, text=True, check=False)   
 
 
-def run_prodigal_gv(input_fasta: Path, output_faa: Path) -> subprocess.CompletedProcess:
+def run_prodigal_gv(input_fasta, output_faa):
     prodigal_path = (
         shutil.which(PRODIGAL_GV_BIN)
         if os.path.sep not in PRODIGAL_GV_BIN
@@ -240,11 +278,11 @@ def run_prodigal_gv(input_fasta: Path, output_faa: Path) -> subprocess.Completed
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
-def read_result_rows(path: Path) -> List[Dict[str, str]]:
+def read_result_rows(path):
     if not path.exists():
         return []
 
-    rows: List[Dict[str, str]] = []
+    rows = []
     with path.open("r", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle, fieldnames=RESULT_COLUMNS, delimiter="\t")
         for row in reader:
@@ -253,7 +291,7 @@ def read_result_rows(path: Path) -> List[Dict[str, str]]:
     return rows
 
 
-def read_headered_tsv_rows(path: Path, limit: int | None = None) -> List[Dict[str, str]]:
+def read_headered_tsv_rows(path, limit=None):
     if not path.exists():
         return []
 
@@ -264,31 +302,60 @@ def read_headered_tsv_rows(path: Path, limit: int | None = None) -> List[Dict[st
         return list(islice(reader, limit))
 
 
-def run_metadata_postprocess(input_tsv: Path, output_tsv: Path) -> subprocess.CompletedProcess:
-    if not POSTPROCESS_SCRIPT.exists():
-        raise FileNotFoundError(f"Script de post-traitement introuvable: {POSTPROCESS_SCRIPT}")
-    if not METADATA_FILE:
-        raise ValueError("METADATA_FILE n'est pas configuré")
+def get_postprocess_settings(mmseqs_db):
+    profile = database_profile(mmseqs_db)
+    if profile == "metavr":
+        return (
+            profile,
+            resolve_project_path(METAVR_POSTPROCESS_SCRIPT),
+            METAVR_METADATA_FILE,
+            METAVR_TAXONOMY_FILE,
+        )
+    return profile, resolve_project_path(VIRE_POSTPROCESS_SCRIPT), VIRE_METADATA_FILE, ""
+
+
+def run_metadata_postprocess(input_tsv, output_tsv, mmseqs_db):
+    profile, script, metadata_file, taxonomy_file = get_postprocess_settings(mmseqs_db)
+    if not script.exists():
+        raise FileNotFoundError(f"Script de post-traitement introuvable: {script}")
+    if not metadata_file:
+        raise ValueError(f"Le fichier de métadonnées {profile.upper()} n'est pas configuré")
+    if profile == "metavr" and not taxonomy_file:
+        raise ValueError("METAVR_TAXONOMY_FILE n'est pas configuré")
 
     cmd = [
         sys.executable,
-        str(POSTPROCESS_SCRIPT),
+        str(script),
         "--profiling",
         str(input_tsv),
         "--metadata",
-        METADATA_FILE,
+        metadata_file,
         "--output",
         str(output_tsv),
     ]
+    if profile == "metavr":
+        cmd.extend(["--taxonomy", taxonomy_file])
 
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
-def generate_kepler_map(input_tsv: Path, output_html: Path) -> int:
+def generate_kepler_map(input_tsv, output_html):
     import pandas as pd
     from keplergl import KeplerGl
 
     df = pd.read_csv(input_tsv, sep="\t")
+    # VIRE uses lowercase column names, whereas MetaVR IMG metadata uses title case.
+    # Normalize only the fields consumed by the map so both output schemas work.
+    column_aliases = {
+        "Latitude": "latitude",
+        "Longitude": "longitude",
+        "Genome Name / Sample Name": "biosample_name",
+        "Study Name": "study_name",
+        "Geographic Location": "geographic_location",
+    }
+    for source, target in column_aliases.items():
+        if target not in df.columns and source in df.columns:
+            df = df.rename(columns={source: target})
     if df.empty or "latitude" not in df.columns or "longitude" not in df.columns:
         return 0
 
@@ -426,7 +493,7 @@ def index():
 
 
 @app.get("/results/<path:filename>")
-def download_result(filename: str):
+def download_result(filename):
     return send_from_directory(RESULTS_DIR, filename)
 
 
@@ -550,12 +617,11 @@ def search():
             map_points=0,
         )
 
-    rows: List[Dict[str, str]]
     map_url = ""
     map_points = 0
 
     try:
-        completed = run_metadata_postprocess(result_file, merged_file)
+        completed = run_metadata_postprocess(result_file, merged_file, selected_db)
         if completed.returncode != 0:
             stderr = (completed.stderr or completed.stdout or "").strip()
             raise RuntimeError(stderr or "Le script de post-traitement a echoue")
@@ -573,11 +639,12 @@ def search():
             warnings.append(f"Carte Kepler ignoree: {exc}")
     except Exception as exc:
         rows = read_result_rows(result_file)[:200]
-        warnings.append(f"Post-traitement metadata ignore: {exc}")
+        warnings.append(f"Post-traitement {database_profile(selected_db).upper()} ignoré: {exc}")
 
     headers = list(rows[0].keys()) if rows else RESULT_COLUMNS
     message_parts.append(f"Recherche terminee. Apercu de {len(rows)} ligne(s).")
     message_parts.append(f"Base MMseqs utilisee: {Path(selected_db).name}.")
+    message_parts.append(f"Profil de post-traitement: {database_profile(selected_db).upper()}.")
     message_parts.append(f"Resultat MMseqs brut: {result_file.name}.")
     if merged_file.exists():
         message_parts.append(f"Resultat enrichi: {merged_file.name}.")
