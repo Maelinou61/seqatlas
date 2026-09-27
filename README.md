@@ -111,5 +111,4 @@ Interface: `http://localhost:8000`
 - Le script MetaVR `scripts/add_metadata/add_metadata_genomes_metavr.py` sélectionne le meilleur génome par contig et ajoute à la fois taxonomie et métadonnées IMG.
 - Le fichier `vire_with_coordinates.parquet` contient déjà `genome_id`, `biosample_name`, `latitude`, `longitude` et les métadonnées utiles.
 - Si le post-traitement ou la carte échouent, la recherche MMseqs continue quand même et l'interface affiche un avertissement.
-- La base `databases/testDB*` déjà présente dans ce dépôt semble être une base MMseqs utilisable telle quelle.
 - L'interface liste automatiquement les bases MMseqs trouvées dans `MMSEQS_DB_DIR` via leurs fichiers `.dbtype`.
