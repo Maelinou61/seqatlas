@@ -99,7 +99,10 @@ def select_best_genome_per_contig(profiling_file, metadata_file, output_file):
     best_genomes["genome_id"] = best_genomes["genome_id"].str.rsplit("_", n=1).str[0]
 
     # --- 7. Ajouter métadonnées ---
-    metadata_df = pd.read_csv(metadata_file, sep="\t")
+    if metadata_file.endswith(".parquet"):
+        metadata_df = pd.read_parquet(metadata_file)
+    else:
+        metadata_df = pd.read_csv(metadata_file, sep="\t")
     merged = best_genomes.merge(
         metadata_df,
         left_on="genome_id",

@@ -49,13 +49,14 @@ POSTPROCESS_SCRIPT = Path(
         BASE_DIR / "scripts" / "add_metadata" / "add_metadata_mmseqs2.py",
     )
 )
-METADATA_FILE = os.getenv("METADATA_FILE", "")
+METADATA_FILE = os.getenv("VIRE_METADATA_FILE", "")
 VIRE_POSTPROCESS_SCRIPT = Path(os.getenv("VIRE_POSTPROCESS_SCRIPT", POSTPROCESS_SCRIPT))
 VIRE_METADATA_FILE = os.getenv("VIRE_METADATA_FILE", METADATA_FILE)
+
 METAVR_POSTPROCESS_SCRIPT = Path(
     os.getenv(
         "METAVR_POSTPROCESS_SCRIPT",
-        BASE_DIR / "scripts" / "add_metadata" / "add_metadata_genomes_metavr.py",
+        BASE_DIR / "scripts" / "add_metadata" / "add_metadata_metavr.py",
     )
 )
 METAVR_METADATA_FILE = os.getenv("METAVR_METADATA_FILE", "")

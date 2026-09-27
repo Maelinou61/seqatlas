@@ -4,8 +4,8 @@ channels:
   - bioconda
 dependencies:
   - python=3.12
-  - mmseqs2
-  - prodigal-gv
+  - mmseqs2=17.b804f
+  - prodigal-gv=2.11.0
   - pip
   - pip:
       - -r requirements.txt
